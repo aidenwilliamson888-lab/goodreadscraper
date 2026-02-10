@@ -18,7 +18,12 @@ export async function onRequestPost({ request }) {
         `https://www.goodreads.com/search/index.xml` +
         `?key=${key}&q=${encodeURIComponent(keywords)}&page=${page}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (BookSearchBot)',
+    'Accept': 'application/xml'
+  }
+});
       const xml = await res.text();
 
       const works = xml.match(/<work>[\s\S]*?<\/work>/g) || [];
