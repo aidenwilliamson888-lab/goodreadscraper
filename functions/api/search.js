@@ -1,15 +1,12 @@
 export async function onRequestPost({ request }) {
   try {
-    const body = await request.json();
-    const key = body.key;
-    const keywords = body.keywords;
-    const limit = body.limit || 100;
+    const { key, keywords, limit = 100 } = await request.json();
 
     if (!key || !keywords) {
       return Response.json({ error: 'Missing params' }, { status: 400 });
     }
 
-    const HARD_LIMIT = 1000; // 👉 ganti 2000 kalau mau
+    const HARD_LIMIT = 1000;
     const SAFE_LIMIT = Math.min(limit, HARD_LIMIT);
     const MAX_PAGE = Math.ceil(SAFE_LIMIT / 10);
 
@@ -30,19 +27,24 @@ export async function onRequestPost({ request }) {
       for (const w of works) {
         if (results.length >= SAFE_LIMIT) break;
 
-        const bookId =
-          (w.match(/<best_book>[\s\S]*?<id>(\d+)<\/id>/) || [])[1] || '';
+        const extract = (regex) =>
+          (w.match(regex) || [])[1] || '';
 
-        const title =
-          (w.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
+        const bookId = extract(/<best_book>[\s\S]*?<id>(\d+)<\/id>/);
+        const title = extract(/<best_book>[\s\S]*?<title>([\s\S]*?)<\/title>/);
+        const author = extract(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>/);
+        const cover = extract(/<best_book>[\s\S]*?<image_url>([\s\S]*?)<\/image_url>/);
 
-        const author =
-          (w.match(/<name>([\s\S]*?)<\/name>/) || [])[1] || '';
+        const rating = extract(/<average_rating>([\s\S]*?)<\/average_rating>/);
+        const reviews = extract(/<ratings_count>([\s\S]*?)<\/ratings_count>/);
 
         results.push({
           id: bookId,
           title,
           author,
+          rating,
+          reviews,
+          cover,
           url: bookId
             ? `https://www.goodreads.com/book/show/${bookId}`
             : ''
@@ -54,11 +56,13 @@ export async function onRequestPost({ request }) {
 
     return Response.json({
       total: results.length,
-      limit: SAFE_LIMIT,
       data: results
     });
 
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500 });
+  } catch (err) {
+    return Response.json(
+      { error: err.message },
+      { status: 500 }
+    );
   }
 }
