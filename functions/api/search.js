@@ -1,40 +1,62 @@
 export async function onRequestPost({ request }) {
   try {
-    const { key, keywords, limit = 10 } = await request.json();
+    const body = await request.json();
+    const key = body.key;
+    const keywords = body.keywords;
+    const limit = body.limit || 100;
 
     if (!key || !keywords) {
       return Response.json({ error: 'Missing params' }, { status: 400 });
     }
 
-    const url =
-      `https://www.goodreads.com/search/index.xml` +
-      `?key=${key}&q=${encodeURIComponent(keywords)}`;
+    const HARD_LIMIT = 1000; // 👉 ganti 2000 kalau mau
+    const SAFE_LIMIT = Math.min(limit, HARD_LIMIT);
+    const MAX_PAGE = Math.ceil(SAFE_LIMIT / 10);
 
-    const res = await fetch(url);
-    const xml = await res.text();
+    let page = 1;
+    let results = [];
 
-    // Ambil <work>...</work>
-    const works = xml.match(/<work>[\s\S]*?<\/work>/g) || [];
+    while (results.length < SAFE_LIMIT && page <= MAX_PAGE) {
+      const url =
+        `https://www.goodreads.com/search/index.xml` +
+        `?key=${key}&q=${encodeURIComponent(keywords)}&page=${page}`;
 
-    const data = works.slice(0, limit).map(w => {
-      const get = (tag) =>
-        (w.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`)) || [])[1] || '';
+      const res = await fetch(url);
+      const xml = await res.text();
 
-      const getAttr = (tag, attr) =>
-        (w.match(new RegExp(`<${tag}[^>]*${attr}="([^"]+)"`)) || [])[1] || '';
+      const works = xml.match(/<work>[\s\S]*?<\/work>/g) || [];
+      if (works.length === 0) break;
 
-      return {
-        id: get('id'),
-        title: get('title'),
-        author: get('name'),
-        rating: get('average_rating'),
-        reviews: get('ratings_count'),
-        cover: getAttr('image_url', ''),
-        url: `https://www.goodreads.com/book/show/${get('id')}`
-      };
+      for (const w of works) {
+        if (results.length >= SAFE_LIMIT) break;
+
+        const bookId =
+          (w.match(/<best_book>[\s\S]*?<id>(\d+)<\/id>/) || [])[1] || '';
+
+        const title =
+          (w.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
+
+        const author =
+          (w.match(/<name>([\s\S]*?)<\/name>/) || [])[1] || '';
+
+        results.push({
+          id: bookId,
+          title,
+          author,
+          url: bookId
+            ? `https://www.goodreads.com/book/show/${bookId}`
+            : ''
+        });
+      }
+
+      page++;
+    }
+
+    return Response.json({
+      total: results.length,
+      limit: SAFE_LIMIT,
+      data: results
     });
-
-    return Response.json(data);
 
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
