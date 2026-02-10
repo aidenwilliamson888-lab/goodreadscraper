@@ -1,87 +1,42 @@
-export async function onRequest(context) {
-  const { request } = context;
-
-  // CORS preflight
-  if (request.method === "OPTIONS") {
-    return new Response(null, { headers: cors() });
-  }
-
-  if (request.method !== "POST") {
-    return new Response("Method Not Allowed", {
-      status: 405,
-      headers: cors()
-    });
-  }
-
+export async function onRequestPost({ request }) {
   try {
-    const { key, keywords, limit } = await request.json();
+    const { key, keywords, limit = 10 } = await request.json();
 
     if (!key || !keywords) {
-      return new Response(
-        JSON.stringify({ error: "API key dan keywords wajib" }),
-        { status: 400, headers: cors() }
-      );
+      return Response.json({ error: 'Missing params' }, { status: 400 });
     }
 
-    const MAX = Number(limit) || 20;
-    let results = [];
+    const url =
+      `https://www.goodreads.com/search/index.xml` +
+      `?key=${key}&q=${encodeURIComponent(keywords)}`;
 
-    const keywordList = keywords
-      .split(",")
-      .map(k => k.trim())
-      .filter(Boolean);
+    const res = await fetch(url);
+    const xml = await res.text();
 
-    for (const q of keywordList) {
-      let page = 1;
+    // Ambil <work>...</work>
+    const works = xml.match(/<work>[\s\S]*?<\/work>/g) || [];
 
-      while (results.length < MAX && page <= 5) {
-        const url =
-          `https://www.goodreads.com/search/index.xml` +
-          `?key=${key}&q=${encodeURIComponent(q)}&page=${page}`;
+    const data = works.slice(0, limit).map(w => {
+      const get = (tag) =>
+        (w.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`)) || [])[1] || '';
 
-        const xml = await fetch(url).then(r => r.text());
-        const works = [...xml.matchAll(/<work>[\s\S]*?<\/work>/g)];
-        if (!works.length) break;
+      const getAttr = (tag, attr) =>
+        (w.match(new RegExp(`<${tag}[^>]*${attr}="([^"]+)"`)) || [])[1] || '';
 
-        for (const w of works) {
-          if (results.length >= MAX) break;
-
-          const id = w[0].match(/<id>(\d+)<\/id>/)?.[1];
-          const title = w[0].match(/<title>([\s\S]*?)<\/title>/)?.[1];
-          const author = w[0].match(/<name>([\s\S]*?)<\/name>/)?.[1];
-          const ratings = Number(
-            w[0].match(/<ratings_count>(\d+)<\/ratings_count>/)?.[1] || 0
-          );
-
-          if (id && title && author) {
-            results.push({ id, title, author, ratings_count: ratings });
-          }
-        }
-
-        page++;
-      }
-    }
-
-    const dedup = Object.values(
-      Object.fromEntries(results.map(b => [b.id, b]))
-    ).sort((a, b) => b.ratings_count - a.ratings_count);
-
-    return new Response(JSON.stringify(dedup.slice(0, MAX)), {
-      headers: { ...cors(), "Content-Type": "application/json" }
+      return {
+        id: get('id'),
+        title: get('title'),
+        author: get('name'),
+        rating: get('average_rating'),
+        reviews: get('ratings_count'),
+        cover: getAttr('image_url', ''),
+        url: `https://www.goodreads.com/book/show/${get('id')}`
+      };
     });
 
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: cors() }
-    );
-  }
-}
+    return Response.json(data);
 
-function cors() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: 500 });
+  }
 }
