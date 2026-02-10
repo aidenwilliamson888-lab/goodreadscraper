@@ -24,30 +24,33 @@ export async function onRequestPost({ request }) {
       const works = xml.match(/<work>[\s\S]*?<\/work>/g) || [];
       if (works.length === 0) break;
 
-      for (const w of works) {
+      for (const work of works) {
         if (results.length >= SAFE_LIMIT) break;
 
-        const extract = (regex) =>
-          (w.match(regex) || [])[1] || '';
+        const bestBook =
+          (work.match(/<best_book>[\s\S]*?<\/best_book>/) || [])[0];
 
-        const bookId = extract(/<best_book>[\s\S]*?<id>(\d+)<\/id>/);
-        const title = extract(/<best_book>[\s\S]*?<title>([\s\S]*?)<\/title>/);
-        const author = extract(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>/);
-        const cover = extract(/<best_book>[\s\S]*?<image_url>([\s\S]*?)<\/image_url>/);
+        if (!bestBook) continue;
 
-        const rating = extract(/<average_rating>([\s\S]*?)<\/average_rating>/);
-        const reviews = extract(/<ratings_count>([\s\S]*?)<\/ratings_count>/);
+        const extract = (src, regex) =>
+          (src.match(regex) || [])[1] || '';
+
+        const id = extract(bestBook, /<id>(\d+)<\/id>/);
+        const title = extract(bestBook, /<title>([\s\S]*?)<\/title>/);
+        const author = extract(bestBook, /<name>([\s\S]*?)<\/name>/);
+        const cover = extract(bestBook, /<image_url>([\s\S]*?)<\/image_url>/);
+
+        const rating = extract(work, /<average_rating>([\s\S]*?)<\/average_rating>/);
+        const reviews = extract(work, /<ratings_count>([\s\S]*?)<\/ratings_count>/);
 
         results.push({
-          id: bookId,
+          id,
           title,
           author,
           rating,
           reviews,
           cover,
-          url: bookId
-            ? `https://www.goodreads.com/book/show/${bookId}`
-            : ''
+          url: id ? `https://www.goodreads.com/book/show/${id}` : ''
         });
       }
 
@@ -60,9 +63,6 @@ export async function onRequestPost({ request }) {
     });
 
   } catch (err) {
-    return Response.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
