@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+.actions{display:flex;gap:10px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>📚 Goodreads Internal Tool</h2>
+<form id="form">
+<input id="key" placeholder="Goodreads API Key" required />
+<textarea id="keywords" placeholder="business, finance, startup" required></textarea>
+<input id="limit" type="number" value="50" />
+<button type="submit">FETCH</button>
+</form>
+<div class="actions" id="actions" style="display:none">
+<button onclick="copyAll()">📋 Copy All JSON</button>
+<button onclick="exportCSV()">⬇️ Export CSV</button>
+</div>
+<div class="table-wrap"><table id="table"></table></div>
+</div>
+
+
+<script>
+let DATA = [];
+
+
+form.onsubmit = async e => {
+e.preventDefault();
+table.innerHTML = 'Loading...';
+
+
+const res = await fetch('/api/search', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+key: key.value,
+keywords: keywords.value,
+limit: limit.value
+})
+});
+
+
+DATA = await res.json();
+render(DATA);
+actions.style.display = 'flex';
+};
+
+
+function render(rows) {
+table.innerHTML = '<tr><th>ID</th><th>Title</th><th>Author</th><th>Ratings</th></tr>';
+rows.forEach(r => table.innerHTML += `<tr><td>${r.id}</td><td>${r.title}</td><td>${r.author}</td><td>${r.ratings_count}</td></tr>`);
+}
+
+
+function copyAll(){navigator.clipboard.writeText(JSON.stringify(DATA,null,2));alert('Copied');}
+function exportCSV(){
+const csv=['id,title,author,ratings_count'];
+DATA.forEach(r=>csv.push(`${r.id},"${r.title}","${r.author}",${r.ratings_count}`));
+const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([csv.join('\n')],{type:'text/csv'}));
+a.download='goodreads.csv';a.click();
+}
+</script>
+</body>
+</html>
