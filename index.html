@@ -148,10 +148,10 @@
   const table = document.getElementById('table');
   const tbody = table.querySelector('tbody');
 
-  btn.onclick = async () => {
+  btn.addEventListener('click', async () => {
     const key = document.getElementById('key').value.trim();
     const keywords = document.getElementById('keywords').value.trim();
-    const limit = document.getElementById('limit').value;
+    const limit = Number(document.getElementById('limit').value) || 100;
 
     if (!key || !keywords) {
       status.textContent = 'API key dan keyword wajib diisi.';
@@ -159,7 +159,9 @@
       return;
     }
 
-    status.textContent = 'Loading data dari Goodreads...';
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    status.textContent = 'Mengambil data dari Goodreads...';
     status.className = 'status loading';
     table.style.display = 'none';
     tbody.innerHTML = '';
@@ -172,18 +174,13 @@
       });
 
       if (!res.ok) {
-        throw new Error('Request gagal (' + res.status + ')');
+        throw new Error(`HTTP ${res.status}`);
       }
 
       const json = await res.json();
       const data = json.data || [];
 
-      data.forEach(b => {
-       ...
-      });
-
-
-      if (!data || data.length === 0) {
+      if (data.length === 0) {
         status.textContent = 'Tidak ada data ditemukan.';
         return;
       }
@@ -191,24 +188,27 @@
       data.forEach(b => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${b.title}</td>
-          <td>${b.author}</td>
-          <td>${b.rating}</td>
-          <td>${b.reviews}</td>
-          <td><a href="${b.url}" target="_blank">Open</a></td>
+          <td>${b.title || '-'}</td>
+          <td>${b.author || '-'}</td>
+          <td>${b.rating || '-'}</td>
+          <td>${b.reviews || '-'}</td>
+          <td>${b.url ? `<a href="${b.url}" target="_blank">Open</a>` : '-'}</td>
         `;
         tbody.appendChild(tr);
       });
 
       table.style.display = 'table';
-      status.textContent = `Menampilkan ${data.length} buku`;
+      status.textContent = `Menampilkan ${json.total} buku`;
       status.className = 'status';
 
     } catch (err) {
       status.textContent = 'Error: ' + err.message;
       status.className = 'status error';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Fetch';
     }
-  };
+  });
 </script>
 
 </body>
